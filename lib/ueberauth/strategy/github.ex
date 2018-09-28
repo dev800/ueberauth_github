@@ -86,12 +86,15 @@ defmodule Ueberauth.Strategy.Github do
   You can also include a `state` param that github will return to you.
   """
   def handle_request!(conn) do
+    module = option(conn, :oauth2_module)
     scopes = conn.params["scope"] || option(conn, :default_scope)
+    config = Application.get_env(:ueberauth, module, [])
+    redirect_uri = config[:redirect_uri] || callback_url(conn)
     send_redirect_uri = Keyword.get(options(conn), :send_redirect_uri, true)
 
     opts =
       if send_redirect_uri do
-        [redirect_uri: callback_url(conn), scope: scopes]
+        [redirect_uri: redirect_uri, scope: scopes]
       else
         [scope: scopes]
       end
@@ -99,7 +102,6 @@ defmodule Ueberauth.Strategy.Github do
     opts =
       if conn.params["state"], do: Keyword.put(opts, :state, conn.params["state"]), else: opts
 
-    module = option(conn, :oauth2_module)
     redirect!(conn, apply(module, :authorize_url!, [opts]))
   end
 
