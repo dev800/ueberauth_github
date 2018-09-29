@@ -226,7 +226,7 @@ defmodule Ueberauth.Strategy.Github do
     Enum.find(user["emails"], & &1["primary"])["email"]
   end
 
-  defp fetch_user(conn, token) do
+  def fetch_user(conn, token) do
     conn = put_private(conn, :github_token, token)
     # Will be better with Elixir 1.3 with/else
     case Ueberauth.Strategy.Github.OAuth.get(token, "/user") do
@@ -252,6 +252,6 @@ defmodule Ueberauth.Strategy.Github do
   end
 
   defp option(conn, key) do
-    Keyword.get(options(conn), key, Keyword.get(default_options(), key))
+    Keyword.get(options(conn) || %{}, key, Keyword.get(default_options(), key))
   end
 end
