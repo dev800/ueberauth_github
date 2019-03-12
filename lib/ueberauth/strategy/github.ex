@@ -160,7 +160,7 @@ defmodule Ueberauth.Strategy.Github do
   def credentials(conn) do
     token = conn.private.github_token
     scope_string = token.other_params["scope"] || ""
-    scopes = String.split(scope_string, ",")
+    scopes = String.split(scope_string, ",", trim: true)
 
     %Credentials{
       token: token.access_token,
