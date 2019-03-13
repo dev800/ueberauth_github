@@ -77,6 +77,12 @@ defmodule Ueberauth.Strategy.Github do
   alias Ueberauth.Auth.Credentials
   alias Ueberauth.Auth.Extra
 
+  def secure_random_hex(n \\ 16) do
+    n
+    |> :crypto.strong_rand_bytes()
+    |> Base.encode16(case: :lower)
+  end
+
   @doc """
   Handles the initial redirect to the github authentication page.
 
@@ -87,29 +93,32 @@ defmodule Ueberauth.Strategy.Github do
   You can also include a `state` param that github will return to you.
   """
   def handle_request!(conn) do
+    conn = conn |> Plug.Conn.fetch_session()
     module = option(conn, :oauth2_module)
     scopes = conn.params["scope"] || option(conn, :default_scope)
     send_redirect_uri = Keyword.get(options(conn), :send_redirect_uri, true)
     config = conn.private[:ueberauth_request_options] |> Map.get(:options, [])
     redirect_uri = config[:redirect_uri] || callback_url(conn)
-    state = conn.params["state"]
+    state = secure_random_hex()
 
     params =
       if send_redirect_uri do
-        [redirect_uri: redirect_uri, scope: scopes]
+        [redirect_uri: redirect_uri, scope: scopes, state: state]
       else
-        [scope: scopes]
+        [scope: scopes, state: state]
       end
 
-    params = if state, do: Keyword.put(params, :state, state), else: params
-    redirect!(conn, apply(module, :authorize_url!, [params, [config: config]]))
+    conn
+    |> Plug.Conn.put_session(:ueberauth_state, state)
+    |> redirect!(apply(module, :authorize_url!, [params, [config: config]]))
   end
 
   @doc """
   Handles the callback from Github. When there is a failure from Github the failure is included in the
   `ueberauth_failure` struct. Otherwise the information returned from Github is returned in the `Ueberauth.Auth` struct.
   """
-  def handle_callback!(%Plug.Conn{params: %{"code" => code}} = conn) do
+  def handle_callback!(%Plug.Conn{params: %{"code" => code, "state" => state}} = conn) do
+    conn = conn |> Plug.Conn.fetch_session()
     module = option(conn, :oauth2_module)
 
     client_options =
@@ -119,13 +128,23 @@ defmodule Ueberauth.Strategy.Github do
 
     options = [client_options: [config: client_options]]
     token = apply(module, :get_token!, [[code: code], [options: options]])
+    session_state = conn |> Plug.Conn.get_session(:ueberauth_state)
 
-    if token.access_token |> to_string |> String.length() == 0 do
-      set_errors!(conn, [
-        error(token.other_params["error"], token.other_params["error_description"])
-      ])
-    else
-      fetch_user(conn, token)
+    conn = conn |> Plug.Conn.delete_session(:ueberauth_state)
+
+    cond do
+      state != session_state ->
+        set_errors!(conn, [
+          error("StateMistake", "state misstake")
+        ])
+
+      token.access_token |> to_string |> String.length() == 0 ->
+        set_errors!(conn, [
+          error(token.other_params["error"], token.other_params["error_description"])
+        ])
+
+      true ->
+        fetch_user(conn, token)
     end
   end
 
