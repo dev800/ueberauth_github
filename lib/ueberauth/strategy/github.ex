@@ -77,6 +77,8 @@ defmodule Ueberauth.Strategy.Github do
   alias Ueberauth.Auth.Credentials
   alias Ueberauth.Auth.Extra
 
+  def oauth2_module, do: Ueberauth.Strategy.Github.OAuth
+
   def secure_random_hex(n \\ 16) do
     n
     |> :crypto.strong_rand_bytes()
@@ -123,7 +125,7 @@ defmodule Ueberauth.Strategy.Github do
 
     client_options =
       conn.private
-      |> Map.get(:ueberauth_request_options, [])
+      |> Map.get(:ueberauth_request_options, %{})
       |> Map.get(:options, [])
 
     options = [client_options: [config: client_options]]
@@ -190,6 +192,8 @@ defmodule Ueberauth.Strategy.Github do
       scopes: scopes
     }
   end
+
+  def present?(str), do: str |> to_string() |> String.length() > 0
 
   @doc """
   Fetches the fields to populate the info section of the `Ueberauth.Auth` struct.
